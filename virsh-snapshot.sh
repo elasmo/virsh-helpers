@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Virsh create snapshot helper
+# Create domain snapshot
 #
 set -e
 

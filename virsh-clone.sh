@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Virsh domain clone helper
+# Clone a domain
 #
 set -e
 

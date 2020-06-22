@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Virsh domain spice connect helper
+# Connect to spice
 #
 for dep in spicy virsh; do
    if ! type $dep >/dev/null; then
