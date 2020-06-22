@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Virsh helper to undefine and remove domain
+# Virsh undefine and remove domains helper
 #
 set -e
 

@@ -1,4 +1,7 @@
 #!/bin/sh
+#
+# Virsh domain spice connect helper
+#
 for dep in spicy virsh; do
    if ! type $dep >/dev/null; then
       echo "Missing: $dep"
@@ -12,22 +15,36 @@ if [ $# -ne 1 ]; then
 fi
 
 domain=$1
+running=0
 
-# Always revert this domain
-REVERT_VM="browse"
+# Optional space separated list of domains to revert before start
+REVERT_VM=""
 
+# Check if domain exists
 if ! virsh list --all --name | grep "$domain" >/dev/null; then
     echo "$domain not found."
     echo
     virsh list --all
     exit 1
-elif ! virsh list --state-running --name | grep "$domain" >/dev/null; then
-    if [ "$domain" = "$REVERT_VM" ]; then
-        echo "Reverting $domain to current snapshot."
-        virsh snapshot-revert $REVERT_VM --current
-    fi
+fi
 
+# Check if domain is running
+if virsh list --state-running --name | grep "$domain" >/dev/null; then
+    running=1
+else
+    # Revert to current snapshot for domains listed in REVERT_VM
+    for _domain in $REVERT_VM; do
+        if [ "$domain" = "$_domain" ]; then
+            echo "Reverting $domain to current snapshot."
+            virsh snapshot-revert $_domain --current
+        fi
+    done
+fi
+
+# Start domain if it's not running
+if [ $running -eq 0 ]; then
     virsh start "$domain"
 fi
 
+# Spice it up!
 spicy -f --uri="$(virsh domdisplay $domain)"

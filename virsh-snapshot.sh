@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Virsh helper to create snapshot
+# Virsh create snapshot helper
 #
 set -e
 
