@@ -35,12 +35,12 @@ pprint() {
 [ $# -eq 0 ] && usage
 
 
-size="10G"
-vm_name="$1"
-vol_root="${HOME}/.cryptovols"
-crypt_vol="${vol_root}/${vm_name}_$(uuidgen)"
-tmp_mapper="$(uuidgen)"
-password=$(tr -dc A-Za-z0-9_ < /dev/urandom | head -c 64)
+SIZE="10G"
+VM_NAME="$1"
+VOL_ROOT=""
+CRYPT_VOL="$VOL_ROOT/$VM_NAME-cryptvol-$(openssl rand -hex 5)"
+TMP_MAPPER="$(openssl rand -hex 5)"
+
 
 trap 'error "Bailing out"' ERR
 
