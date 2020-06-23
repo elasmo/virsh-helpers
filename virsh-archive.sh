@@ -14,7 +14,7 @@ if [ "$(id -u)" != 0 ]; then
 fi
 
 # Check dependencies
-for dep in virsh cryptsetup qemu-nbd cryptsetup vgscan vgchange jq xmllint shuf; do
+for dep in virsh qemu-nbd cryptsetup vgscan vgchange jq xmllint shuf; do
     if ! type $dep >/dev/null; then
         error "$dep: Not found"
     fi
@@ -25,19 +25,34 @@ if [ $# -ne 2 ]; then
 fi
 
 # Check if domain exists
+# lib::domain_exist
 if ! virsh list --all --name | grep "$domain" >/dev/null; then
     error "$domain: Not found"
 fi
 
 # Check if domain is active
+# lib::domain_active $domain
 if virsh list --state-running --name | grep "$domain" >/dev/null; then
     error "$domain: Is active"
 else
 
+# Defaults
+NBD_PART="nbd0p5"
+LV_NAME="root"
+TMP_MAPPER="tmpvol"
+ARCHIVE_DIR="$HOME/archived"
+
+# Create archive dir
+if [ ! -d "$ARCHIVE_DIR" ]; then
+    mkdir -p "$ARCHIVE_DIR"
+fi
+
 # Find path to first disk image
+#lib::image_path $domain
 disk_image=$(virsh dumpxml "$domain" | xmllint --xpath 'string(//domain/devices/disk[1]/source/@file)' -)
 
 # Determine image format (raw or qcow2)
+#lib::image_format $image
 disk_format=$(qemu-img info $disk_image --output json | jq -r '.format')
 
 # Load nbd module
@@ -46,27 +61,40 @@ if ! lsmod | cut -f1 -d' ' | grep nbd; then
 fi
 
 # Connect /dev/nbd0 to disk image
-qemu-nbd -f "$disk_format" -c /dev/nbd0 $disk_image
+qemu-nbd -f "$disk_format" -c /dev/nbd0 "$disk_image"
 
-echo "[*] Opening /dev/nbd0p5"
-cryptsetup luksOpen /dev/nbd0p5 tmpvol  # Assuming nbd0p5
-vgscan
-vgchange -ay $lvm_name
-mount /dev/$lvm_name/root /mnt
+# Open LUKS container
+echo "[*] Opening /dev/$NBD_PART"
+# lib::luks_open $part $mapper
+cryptsetup luksOpen "/dev/$NBD_PART" "$TMP_MAPPER"
 
+# Determine LVM group
+# lib::lvm_groups
+lv_groups=$(vgscan | grep "Found volume group" | cut -f6 -d' ' | tr -d '"')
+echo -n "LVM group ($lv_groups): "
+read $lv_group
+
+# Set LVM group in active state and mount
+# lib::lvm_set_active $lv_group
+vgchange -ay $lv_group
+mount "/dev/$lv_group/$LV_NAME" /mnt
+
+# Create compressed tar and encrypt usng static key
 echo "[*] Creating encrypted archive"
-pass_len="$(shuf -i 10-32 -n 1)"
-passphrase="$(openssl rand -hex $pass_len)"
-echo "[*] Password: $passphrase"
 umask 077
-tar zcvf - /mnt/home | openssl aes256 etc..
+archive_out="$ARCHIVE_DIR/$domain-archived-$(date +%y%m%d)"
+tar zcf - /mnt/home | \
+    openssl enc -aes-256-cbc -in - -pbkdbf2 -md sha512 -out "$archive_out"
 
-echo "[*] Removing domain"
-. virsh-remove.sh $domain_name
+# Undefine domain and remove disk image
+#lib::domain_remove $domain
+. virsh-remove.sh $domain
 
 echo "[*] Cleaning up"
-umount /mnt
-vgchange -an $lvm_name
-qemu-nbd --disconnect /dev/bbd0
+umount -qf /mnt
+# lib::lvm_set_inactive
+vgchange -an $lv_group > /dev/null
+# lib::luks_close $mapper
+cryptsetup luksClose "/dev/mapper/$TMP_MAPPER"
+qemu-nbd --disconnect /dev/$NBD_PART >/dev/null
 rmmod nbd
-
