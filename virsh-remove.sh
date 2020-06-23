@@ -9,6 +9,13 @@ error () {
     exit 1
 }
 
+usage () {
+    echo "Usage: $(basename $0) <domain>" 1>&2
+    exit 1
+}
+
+[ $# -ne 1 ] && usage
+
 # Check dependencies
 for dep in virsh awk; do
     if ! type virsh awk >/dev/null; then
@@ -16,14 +23,12 @@ for dep in virsh awk; do
     fi
 done
 
-if [ $# -ne 1 ]; then
-    error "Usage: $(basename $0) <domain>"
-fi
-
 domain=$1
 disk_image=$(virsh domblklist "$domain" | grep "libvirt/images" | awk -v x=2 '{print $x}')
 
-printf "Removing $domain ($disk_image)\n^C to abort.\n"
+echo "Removing $domain ($disk_image)"
+echo "^C to abort"
 read
+
 virsh undefine "$domain"
 rm -v "$disk_image"

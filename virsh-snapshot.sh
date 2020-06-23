@@ -9,12 +9,15 @@ error () {
     exit 1
 }
 
+usage () {
+    echo "Usage: $(basename $0) <domain>" 1>&2
+    exit 1
+}
+
+[ $# -ne 1 ] && usage
+
 if ! type virsh >/dev/null; then
     error "virsh: Not found"
-fi
-
-if [ $# -ne 1 ]; then
-    error "Usage: $(basename $0) <domain>"
 fi
 
 virsh snapshot-create-as --domain "$1" --name "snapshot-$(date +%s)"

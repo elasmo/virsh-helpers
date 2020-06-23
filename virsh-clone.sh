@@ -4,10 +4,19 @@
 #
 set -e
 
+SCRIPT_NAME=$(basename $0)
+
 error () {
     echo "$@" 1>&2
     exit 1
 }
+
+usage () {
+    echo "Usage: $SCRIPT_NAME <source> <dest>" 1>&2
+    exit 1
+}
+
+[ $# -ne 2 ] && usage
 
 # Check dependencies
 for dep in virsh virt-clone xmllint; do
@@ -15,10 +24,6 @@ for dep in virsh virt-clone xmllint; do
         error "$dep: Not found"
     fi
 done
-
-if [ $# -ne 2 ]; then
-    error "Usage: $(basename $0) <source> <dest>"
-fi
 
 src_name="$1"
 dst_name="$2"

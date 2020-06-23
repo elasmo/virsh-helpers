@@ -16,14 +16,19 @@ error () {
     exit 1
 }
 
+usage () {
+    echo "Usage: $(basename $0) <domain> <size>" 1>&2
+    exit 1
+}
+
+[ $# -eq 0 ] && usage
+
 # Check dependencies
 for dep in virsh cryptsetup xmllint openssl sudo; do
    if ! type $dep >/dev/null; then
        error "$dep: Not found"
    fi
 done
-
-[ $# -eq 0 ] && error "Usage: $(basename $0) <domain> [size]"
 
 trap error ERR
 
