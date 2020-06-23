@@ -2,16 +2,20 @@
 #
 # Connect to spice
 #
+error () {
+    echo "$@" 1>&2
+    exit 1
+}
+
+# Check dependencies
 for dep in spicy virsh; do
    if ! type $dep >/dev/null; then
-      echo "Missing: $dep"
-      exit 1
+       error "$dep: Not found"
    fi
 done
 
 if [ $# -ne 1 ]; then
-    echo "Usage: $(basename $0) <domain>"
-    exit 1
+    error "Usage: $(basename $0) <domain>"
 fi
 
 domain=$1
@@ -22,10 +26,7 @@ REVERT_VM=""
 
 # Check if domain exists
 if ! virsh list --all --name | grep "$domain" >/dev/null; then
-    echo "$domain not found."
-    echo
-    virsh list --all
-    exit 1
+    error "$domain: Not found"
 fi
 
 # Check if domain is running
@@ -35,7 +36,7 @@ else
     # Revert to current snapshot for domains listed in REVERT_VM
     for _domain in $REVERT_VM; do
         if [ "$domain" = "$_domain" ]; then
-            echo "Reverting $domain to current snapshot."
+            echo "$domain: Reverting to current snapshot"
             virsh snapshot-revert $_domain --current
         fi
     done

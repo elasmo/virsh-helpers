@@ -4,20 +4,26 @@
 #
 set -e
 
-if ! type virsh >/dev/null; then
-    echo "virsh not found"
+error () {
+    echo "$@" 1>&2
     exit 1
-fi
+}
+
+# Check dependencies
+for dep in virsh awk; do
+    if ! type virsh awk >/dev/null; then
+        error "$dep: Not found"
+    fi
+done
 
 if [ $# -ne 1 ]; then
-    echo "Usage: $(basename $0) <domain>"
-    exit 1
+    error "Usage: $(basename $0) <domain>"
 fi
 
 domain=$1
-vm_image=$(virsh domblklist "$domain" | grep "libvirt/images" | awk -v x=2 '{print $x}')
+disk_image=$(virsh domblklist "$domain" | grep "libvirt/images" | awk -v x=2 '{print $x}')
 
-printf "Removing $domain ($vm_image)\n^C to abort.\n"
+printf "Removing $domain ($disk_image)\n^C to abort.\n"
 read
 virsh undefine "$domain"
-rm -v "$vm_image"
+rm -v "$disk_image"
