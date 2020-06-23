@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Archive home directory and remove domain
+# Archive home directory
 #
 set -e
 
@@ -58,6 +58,7 @@ echo "[*] Creating encrypted archive"
 pass_len="$(shuf -i 10-32 -n 1)"
 passphrase="$(openssl rand -hex $pass_len)"
 echo "[*] Password: $passphrase"
+umask 077
 tar zcvf - /mnt/home | openssl aes256 etc..
 
 echo "[*] Removing domain"
