@@ -4,11 +4,28 @@
 #
 set -e
 
+SCRIPT_NAME=$(basename $0)
+
 error () {
-    echo "$@" 1>&2
+    echo "$SCRIPT_NAME: $@" 1>&2
     exit 1
 }
 
+usage () {
+    echo "Usage: $SCRIPT_NAME <domain>" 1>&2
+    exit 1
+}
+
+cleanup () {
+    umount -qf /mnt
+    [ -n "$lv_group" ] && vgchange -an $lv_group >/dev/null
+    [ -n "$TMP_MAPPER" ] && cryptsetup luksClose "/dev/mapper/$TMP_MAPPER"
+    [ -n "$NBD_PART" ] && qemu-nbd --disconnect $NBD_PART >/dev/null
+    rmmod nbd
+}
+trap cleanup EXIT
+
+# Require root
 if [ "$(id -u)" != 0 ]; then
     error "$(whoami): Permission denied"
 fi
@@ -20,24 +37,20 @@ for dep in virsh qemu-nbd cryptsetup vgscan vgchange jq xmllint shuf; do
     fi
 done
 
-if [ $# -ne 2 ]; then
-    error "Usage: $(basename $0) <domain>"
-fi
+if [ $# -ne 2 ] && usage
 
 # Check if domain exists
-# lib::domain_exist
 if ! virsh list --all --name | grep "$domain" >/dev/null; then
     error "$domain: Not found"
 fi
 
 # Check if domain is active
-# lib::domain_active $domain
 if virsh list --state-running --name | grep "$domain" >/dev/null; then
     error "$domain: Is active"
 else
 
 # Defaults
-NBD_PART="nbd0p5"
+NBD_PART="/dev/nbd0p5"
 LV_NAME="root"
 TMP_MAPPER="tmpvol"
 ARCHIVE_DIR="$HOME/archived"
@@ -48,11 +61,9 @@ if [ ! -d "$ARCHIVE_DIR" ]; then
 fi
 
 # Find path to first disk image
-#lib::image_path $domain
 disk_image=$(virsh dumpxml "$domain" | xmllint --xpath 'string(//domain/devices/disk[1]/source/@file)' -)
 
 # Determine image format (raw or qcow2)
-#lib::image_format $image
 disk_format=$(qemu-img info $disk_image --output json | jq -r '.format')
 
 # Load nbd module
@@ -64,18 +75,16 @@ fi
 qemu-nbd -f "$disk_format" -c /dev/nbd0 "$disk_image"
 
 # Open LUKS container
-echo "[*] Opening /dev/$NBD_PART"
-# lib::luks_open $part $mapper
-cryptsetup luksOpen "/dev/$NBD_PART" "$TMP_MAPPER"
+echo "[*] Opening $NBD_PART"
+cryptsetup luksOpen "$NBD_PART" "$TMP_MAPPER"
 
 # Determine LVM group
-# lib::lvm_groups
 lv_groups=$(vgscan | grep "Found volume group" | cut -f6 -d' ' | tr -d '"')
-echo -n "LVM group ($lv_groups): "
+echo "Available LVM groups: $lv_groups"
+echo -n "Choice: "
 read $lv_group
 
 # Set LVM group in active state and mount
-# lib::lvm_set_active $lv_group
 vgchange -ay $lv_group
 mount "/dev/$lv_group/$LV_NAME" /mnt
 
@@ -87,14 +96,8 @@ tar zcf - /mnt/home | \
     openssl enc -aes-256-cbc -in - -pbkdbf2 -md sha512 -out "$archive_out"
 
 # Undefine domain and remove disk image
-#lib::domain_remove $domain
-. virsh-remove.sh $domain
+if [ ! -x virsh-remove.sh ];
+    error "virsh-remove.sh: Not found"
+fi
 
-echo "[*] Cleaning up"
-umount -qf /mnt
-# lib::lvm_set_inactive
-vgchange -an $lv_group > /dev/null
-# lib::luks_close $mapper
-cryptsetup luksClose "/dev/mapper/$TMP_MAPPER"
-qemu-nbd --disconnect /dev/$NBD_PART >/dev/null
-rmmod nbd
+. virsh-remove.sh $domain
