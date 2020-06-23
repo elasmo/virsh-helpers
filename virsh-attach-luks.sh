@@ -1,93 +1,76 @@
 #!/usr/bin/env bash
 #
-# Create a LUKS encrypted volume and attach it to
-# a virsh managed domain
+# XXX Work in progress
 #
-# Usage examples:
-# host$ attach-luks myvm 5G
-# host$ attach-luks myvm
-# myvm$ sudo cryptsetup luksOpen /dev/vde cryptvol
-# myvm$ sudo mount /dev/mapper/cryptvol /mnt
+# Attach LUKS container to domain guest
+#
+# Exposes a device target in guest. Example:
+#   host$ virsh-attach-luks.sh guest 2G
+#   guest# cryptsetup luksOpen /dev/vdb vol
+#   guest#  mount /dev/mapper/vol /mnt
 # 
 set -e
 
-for dep in virsh cryptsetup xmllint; do
+error () {
+    echo "$@" 1>&2
+    exit 1
+}
+
+# Check dependencies
+for dep in virsh cryptsetup xmllint openssl sudo; do
    if ! type $dep >/dev/null; then
-      echo "Missing: $dep"
-      exit 1
+       error "$dep: Not found"
    fi
 done
 
-error() {
-    printf >&2 "\e[38;5;155m===>\e[0m\e[0;31m $@\e[0m\n"
-    if [ ! -z ${crypt_vol+x} ]; then
-        if [ -f "${crypt_vol}" ]; then
-            pprint "Cleaning up\n"
-            rm -f "${crypt_vol}"
-        fi
-    fi
-    exit 1
-}
+[ $# -eq 0 ] && error "Usage: $(basename $0) <domain> [size]"
 
-usage() {
-    echo "Usage: $(basename $0) <vm_name> [<size>] [<target>]"
-    exit 1
-}
+trap error ERR
 
-pprint() {
-    printf "\e[38;5;155m===>\e[0m $@"
-}
-
-
-[ $# -eq 0 ] && usage
-
-if [ $(id -u) -eq 0 ]; then
-    error "$(basename $0) is preferably executed as a low privileged user. $(which sudo) is used when needed."
-fi
-
-
+domain_name="$1"
 size="10G"
-vm_name="$1"
-vol_root="${HOME}/.cryptovols"
-vol_target="vde"
-crypt_vol="${vol_root}/${vm_name}-$(date +%y%m%d-%H%M)"
-tmp_mapper="$(cat /proc/sys/kernel/random/uuid)"
-password=$(tr -dc A-Za-z0-9_ < /dev/urandom | head -c 64)
+vol_dir="$(virsh pool-dumpxml default | xmllint --xpath '//path/text()' -)"
+cryptvol_dir="$vol_path/cryptovols"
+cryptvol_name="$cryptvol_dir/$domain_name-$(date +%y%m%d).luks"
+cryptvol_mapper="$domain_name-$(date +%y%m%d).mapper"
+passphrase="$(openssl rand -hex 32)"
 
-trap 'error "Bailing out"' ERR
-
-# Check if vm guest exists
-if [ ! "$(virsh dominfo $1 2> /dev/null)" ]; then 
-    error "virsh domain $1 not found"
+# Check if domain exists
+if ! virsh list --all --name | grep "$domain" >/dev/null; then
+    error "$domain: Not found"
 fi
+
+# Find next free device target to use
+targets="$(virsh dumpxml meeting | xmllint --xpath '//domain/devices/disk/target[@bus="virtio"]/@dev' -)"
+for t in b c d e f; do
+    for target in $targets; do
+        target="$(echo $target | cut -f2 -d'=' | tr -dc a-z)"
+        if [ "$target" != "vd$t" ]; then
+            vol_target="vd$t"
+            break 2
+        fi
+    done
+done
 
 # Set volume size if specified
-if [ ! -z "$2" ]; then
-    size="$2"
-fi
+[ ! -z "$2" ] && size="$2"
 
-# Set target if specified
-if [ ! -z "$3" ]; then
-    vol_target="$3"
-fi
+# Create volume directory
+[ ! -d "${vol_root}" ] && mkdir -p "$cryptvol_dir"
 
-# Create image directory if not found
-if [ ! -d "${vol_root}" ]; then
-    pprint "Creating ${vol_root}\n"
-    mkdir ${vol_root}
-fi
+echo "[*] Truncating $cryptvol_name to $size"
+truncate -s "$size" "$cryptvol_name"
 
+echo "[*] Initializes a LUKS partition"
+echo "$passphrase" | sudo cryptsetup luksFormat "$cryptvol_name"
+echo "[*] Passphrase: $passphrase"
 
-pprint "Creating ${size} crypto volume ${crypt_vol}\n"
-truncate -s ${size} "${crypt_vol}"
-echo ${password} | sudo cryptsetup --hash sha512 --batch-mode luksFormat ${crypt_vol}
-pprint "Password: ${password}\n"
-
-pprint "Creating filesystem\n"
-echo ${password} | sudo cryptsetup open ${crypt_vol} ${tmp_mapper}
-sudo mkfs.ext4 /dev/mapper/${tmp_mapper} > /dev/null 2>&1
+echo "[*] Creating ext4 filesystem"
+echo "$passphrase" | sudo cryptsetup open "$cryptvol_name" "$cryptvol_mapper"
+sudo mkfs.ext4 "/dev/mapper/$cryptvol_mapper" > /dev/null 2>&1
 sync
-sudo cryptsetup close ${tmp_mapper}
+sudo cryptsetup close "$cryptvol_mapper"
+unset $passphrase
 
-pprint "Attaching ${crypt_vol} to ${vm_name}:${vol_target}\n"
-virsh attach-disk ${vm_name} ${crypt_vol} ${vol_target} --cache none > /dev/null
+echo "[*] Attaching disk to $domain_name"
+virsh attach-disk "$domain_name" "$cryptvol_name" "$vol_target" --cache none > /dev/null
