@@ -30,8 +30,6 @@ for dep in virsh cryptsetup xmllint openssl sudo; do
    fi
 done
 
-trap error ERR
-
 domain="$1"
 size="10G"
 vol_dir="$(virsh pool-dumpxml default | xmllint --xpath '//path/text()' -)"
@@ -49,20 +47,19 @@ fi
 # Check if cryptvol already exist
 [ -f "$cryptvol_path" ] && error "$cryptvol_name: Already exist"
 
-# Find next free device target to use
+# Find available device target we can use
 targets="$(virsh dumpxml $domain | xmllint --xpath '//domain/devices/disk/target[@bus="virtio"]/@dev' -)"
 
 can_use=1
-for t in b c d e f; do
+for suffix in b c d e f; do
     for target in $targets; do
         device="$(echo $target | cut -f2 -d'=' | tr -dc a-z)"
-
-        # Check if disk ident is listed among existent device targets
-        [ "$device" = "vd$t" ] && can_use=0
+        [ "$device" = "vd$suffix" ] && can_use=0
     done
 
+    # Found next available target
     if [ $can_use -eq 1 ]; then
-        vol_target="vd$t"
+        vol_target="vd$suffix"
         break
     fi
 
@@ -78,16 +75,18 @@ done
 echo "[*] Truncating \"$cryptvol_name\" to $size"
 truncate -s "$size" "$cryptvol_path"
 
-echo "[*] Initializes a LUKS partition"
+echo "[*] Initializes a LUKS device"
 echo "$passphrase" | sudo cryptsetup luksFormat "$cryptvol_path"
-echo "[*] Passphrase: $passphrase"
+echo "[*] Passphrase: $passphrase (save this)"
+
+echo "[*] Opening LUKS device"
+echo "$passphrase" | sudo cryptsetup open "$cryptvol_path" "$cryptvol_mapper"
+unset $passphrase
 
 echo "[*] Creating ext4 filesystem"
-echo "$passphrase" | sudo cryptsetup open "$cryptvol_path" "$cryptvol_mapper"
 sudo mkfs.ext4 "/dev/mapper/$cryptvol_mapper" > /dev/null 2>&1
 sync
 sudo cryptsetup close "$cryptvol_mapper"
-unset $passphrase
 
 echo "[*] Attaching $cryptvol_name to $domain"
 virsh attach-disk "$domain" "$cryptvol_path" "$vol_target" --cache none > /dev/null
