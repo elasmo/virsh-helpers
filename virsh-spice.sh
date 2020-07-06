@@ -36,7 +36,8 @@ fi
 if virsh list --state-running --name | grep "$domain" >/dev/null; then
     running=1
 else
-    # Revert to current snapshot for domains listed in REVERT_VM
+    # Revert to current snapshot if the domain
+    # is not running and is listed in REVERT_VM
     for _domain in $REVERT_VM; do
         if [ "$domain" = "$_domain" ]; then
             echo "$domain: Reverting to current snapshot"
