@@ -55,6 +55,13 @@ for suffix in b c d e f; do
     for target in $targets; do
         device="$(echo $target | cut -f2 -d'=' | tr -dc a-z)"
         [ "$device" = "vd$suffix" ] && can_use=0
+
+        # XXX
+        #if [ "$device" = "vd$suffix" ]; then
+        #    can_use=0
+        #else
+        #    can_use=1
+        #fi
     done
 
     # Found next available target
@@ -77,21 +84,21 @@ fi
 # Create volume directory
 [ ! -d "${vol_root}" ] && mkdir -p "$cryptvol_dir"
 
-echo "[*] Truncating \"$cryptvol_name\" to $size"
+echo "===> Truncating \"$cryptvol_name\" to $size"
 truncate -s "$size" "$cryptvol_path"
 
-echo "[*] Initializes a LUKS device"
+echo "===> Initializes a LUKS device"
 echo "$passphrase" | sudo cryptsetup luksFormat "$cryptvol_path"
-echo "[*] Passphrase: $passphrase (save this)"
+echo "===> Passphrase: $passphrase (save this)"
 
-echo "[*] Opening LUKS device"
+echo "===> Opening LUKS device"
 echo "$passphrase" | sudo cryptsetup open "$cryptvol_path" "$cryptvol_mapper"
 unset $passphrase
 
-echo "[*] Creating filesystem"
+echo "===> Creating filesystem"
 sudo mkfs.ext4 "/dev/mapper/$cryptvol_mapper" >/dev/null 2>&1
 sync
 sudo cryptsetup close "$cryptvol_mapper"
 
-echo "[*] Attaching $cryptvol_name to $domain"
+echo "===> Attaching $cryptvol_name to $domain"
 virsh attach-disk "$domain" "$cryptvol_path" "$vol_target" --cache none >/dev/null
