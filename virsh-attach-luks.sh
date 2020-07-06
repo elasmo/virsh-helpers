@@ -66,6 +66,11 @@ for suffix in b c d e f; do
     can_use=1
 done
 
+# Bail out if we there's no available targets
+if [ $can_use -eq 0 ]; then
+    error "No available targets"
+fi
+
 # Set volume size if specified
 [ ! -z "$2" ] && size="$2"
 
@@ -83,10 +88,10 @@ echo "[*] Opening LUKS device"
 echo "$passphrase" | sudo cryptsetup open "$cryptvol_path" "$cryptvol_mapper"
 unset $passphrase
 
-echo "[*] Creating ext4 filesystem"
-sudo mkfs.ext4 "/dev/mapper/$cryptvol_mapper" > /dev/null 2>&1
+echo "[*] Creating filesystem"
+sudo mkfs.ext4 "/dev/mapper/$cryptvol_mapper" >/dev/null 2>&1
 sync
 sudo cryptsetup close "$cryptvol_mapper"
 
 echo "[*] Attaching $cryptvol_name to $domain"
-virsh attach-disk "$domain" "$cryptvol_path" "$vol_target" --cache none > /dev/null
+virsh attach-disk "$domain" "$cryptvol_path" "$vol_target" --cache none >/dev/null
