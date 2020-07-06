@@ -18,7 +18,7 @@ usage () {
 
 # Check dependencies
 for dep in virsh awk; do
-    if ! type virsh awk >/dev/null; then
+    if ! type $dep >/dev/null; then
         error "$dep: Not found"
     fi
 done
