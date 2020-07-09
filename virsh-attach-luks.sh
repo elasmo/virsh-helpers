@@ -78,7 +78,7 @@ fi
 [ ! -z "$2" ] && size="$2"
 
 # Create volume directory
-[ ! -d "${vol_root}" ] && mkdir -p "$cryptvol_dir"
+[ ! -d "$vol_root" ] && mkdir -p "$cryptvol_dir"
 
 echo "===> Truncating \"$cryptvol_name\" to $size"
 truncate -s "$size" "$cryptvol_path"
