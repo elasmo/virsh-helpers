@@ -50,18 +50,14 @@ fi
 # Find available device target we can use
 targets="$(virsh dumpxml $domain | xmllint --xpath '//domain/devices/disk/target[@bus="virtio"]/@dev' -)"
 
-can_use=1
 for suffix in b c d e f; do
     for target in $targets; do
         device="$(echo $target | cut -f2 -d'=' | tr -dc a-z)"
-        [ "$device" = "vd$suffix" ] && can_use=0
 
-        # XXX
-        #if [ "$device" = "vd$suffix" ]; then
-        #    can_use=0
-        #else
-        #    can_use=1
-        #fi
+        if [ "$device" = "vd$suffix" ]; then
+            can_use=0
+            break
+        fi
     done
 
     # Found next available target

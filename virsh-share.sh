@@ -40,7 +40,7 @@ done
 size="100M"
 
 # Create filesystem
-tmp_fs=`mktemp -p "$HOME" --suffix=.img`
+tmp_fs=`mktemp --suffix=.img`
 truncate -s "$size" "$tmppath"
 mkfs.ext4 "$tmp_fs"
 
