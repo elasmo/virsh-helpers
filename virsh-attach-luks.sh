@@ -69,7 +69,7 @@ for suffix in b c d e f; do
     can_use=1
 done
 
-# Bail out if we there's no available targets
+# Bail out when we don't have any available targets
 if [ $can_use -eq 0 ]; then
     error "No available targets"
 fi
