@@ -35,7 +35,7 @@ do
         esac
 done
 
-# Share between geust and host
+# Share between guest and host
 if [ -n "$src_domain" ] && [ -z "$dst_domain" ]; then
     echo 
 # Share between guest and guest
